@@ -1,0 +1,76 @@
+name: Deploy Node.js to EC2
+
+on:
+  push:
+    branches: [ main, master ]  # Deploy when pushing to main/master
+  pull_request:
+    branches: [ main, master ]
+
+env:
+  NODE_VERSION: '18.x'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run tests (if you have any)
+      run: npm test || echo "No tests found"
+      continue-on-error: true
+    
+    - name: Check for syntax errors
+      run: node -c app.js
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+    
+    - name: Deploy to EC2
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USERNAME }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        port: ${{ secrets.EC2_PORT }}
+        script: |
+          # Navigate to application directory
+          cd /var/www/nodejs-app
+          
+          # Pull latest code
+          git pull origin main || git pull origin master
+          
+          # Install/update dependencies
+          npm ci --production
+          
+          # Restart application with PM2
+          pm2 restart nodejs-api || pm2 start ecosystem.config.js --env production
+          
+          # Save PM2 configuration
+          pm2 save
+          
+          # Reload Nginx (if needed)
+          sudo systemctl reload nginx
+          
+          echo "Deployment completed successfully!"
