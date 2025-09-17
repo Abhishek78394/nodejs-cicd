@@ -17,6 +17,12 @@ app.get('/test', (req, res) => {
   });
 });
 
+app.get('/test-v1', (req, res) => {
+  res.json({
+    message: 'Hello from Node.js App testing api!',
+    timestamp: new Date().toISOString()
+  });
+});
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'OK', 
